@@ -1,4 +1,9 @@
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![stable](http://badges.github.io/stability-badges/dist/stable.svg)](http://github.com/badges/stability-badges)
 # Arduino Projects
+
+Some of my self made project with my Arduino MKR Wifi 1010 and my peripherals. Feel free to use those projects to create awesome stuff.
 
 ## ConnectWithWPA
 Small project to connect Arduino MKR Wifi 1010 to a WPA secured wifi network.
