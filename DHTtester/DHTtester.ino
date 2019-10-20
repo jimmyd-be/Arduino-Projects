@@ -1,4 +1,4 @@
-#include <DHT.h>
+#include "DHT.h"
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -32,5 +32,5 @@ void loop()
   lcd.print(String(dht.getTemperature()));
   lcd.print((char)223); //Print degree icon °
   lcd.print("C");
+  Serial.println(String(dht.getTemperature()));
 }
-

@@ -11,9 +11,9 @@ void setup()
 
 	// Turn on the blacklight and print a message.
 	lcd.backlight();
-	lcd.print("I love you!");
+	lcd.print("Welkom in het");
  lcd.setCursor(0,1);
- lcd.print("Darling");
+ lcd.print("SMIKS!!");
 }
 
 void loop()
