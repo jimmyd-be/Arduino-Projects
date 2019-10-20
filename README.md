@@ -19,3 +19,5 @@ Small test project to use Microphone to find some sound in the environment.
 Small project to test the Relay connection on the Arduino MKR 1010.
 ## Wifi_Relay
 Wifi relay that can be triggered from any device on the same network.
+## Signal_check
+Project that reads all port inputs and send a message to a MQTT server when an input has given
