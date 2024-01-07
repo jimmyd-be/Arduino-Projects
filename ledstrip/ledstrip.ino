@@ -3,10 +3,6 @@
 #include <WiFiNINA.h>
 #include "arduino_secrets.h"
 
-#ifdef __AVR__
-#include <avr/power.h>
-#endif
-
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;    // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
@@ -17,12 +13,10 @@ const unsigned long REFRESH_INTERVAL = 1000;  // ms
 unsigned long lastRefreshTime = 0;
 
 bool autoMode = true;
-int hue = 0;  // Initialize the hue value
-
+int hue = 0;
 
 #define PIN 5
 #define NUMPIXELS 60
-#define BROKER_ADDR IPAddress(192, 168, 0, 250)
 
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
@@ -31,7 +25,8 @@ WiFiClient client;
 HADevice device;
 HAMqtt mqtt(client, device);
 
-HALight light("tvLeds", HALight::BrightnessFeature | HALight::RGBFeature);
+HALight light("tvLeds", HALight::RGBFeature);
+HASwitch autoModeSwitch("autoMode");
 
 
 void connectToWifi() {
@@ -63,29 +58,32 @@ void connectToWifi() {
   Serial.println("You're connected to the network");
 }
 
-void onStateCommand(bool state, HALight* sender) {
+void onAutoModeCommand(bool state, HASwitch* sender) {
   Serial.print("State: ");
   Serial.println(state);
 
   if (state == 0) {
-    pixels.clear();
-    pixels.show();
-    //  autoMode = false;
+    autoMode = false;
   } else {
     autoMode = true;
   }
 
-  sender->setState(state);  // report state back to the Home Assistant
+  sender->setState(state);
 }
 
-void onBrightnessCommand(uint8_t brightness, HALight* sender) {
-  Serial.print("Brightness: ");
-  Serial.println(brightness);
+void onStateCommand(bool state, HALight* sender) {
+  Serial.print("State: ");
+  Serial.println(state);
 
-  pixels.setBrightness(brightness);
-
-  sender->setBrightness(brightness);  // report brightness back to the Home Assistant
+  if (state == false) {
+    pixels.clear();
+    pixels.show();
+    autoMode = false;
+    autoModeSwitch.setState(false);
+  } 
+  sender->setState(state);
 }
+
 
 void onRGBColorCommand(HALight::RGBColor color, HALight* sender) {
   Serial.print("Red: ");
@@ -95,7 +93,7 @@ void onRGBColorCommand(HALight::RGBColor color, HALight* sender) {
   Serial.print("Blue: ");
   Serial.println(color.blue);
 
-  // autoMode = false;
+  autoMode = false;
 
   pixels.clear();
 
@@ -105,7 +103,7 @@ void onRGBColorCommand(HALight::RGBColor color, HALight* sender) {
   }
   pixels.show();
 
-  sender->setRGBColor(color);  // report color back to the Home Assistant
+  sender->setRGBColor(color);
 }
 
 
@@ -121,29 +119,16 @@ void configureHass() {
   device.setManufacturer("NeoPixel");
   device.setModel("WS2812b");
 
-  // configure light (optional)
   light.setName("Tv");
+  light.setCurrentState(true);
+  autoModeSwitch.setName("Auto mode");
+  autoModeSwitch.setCurrentState(true);
 
-  // Optionally you can set retain flag for the HA commands
-  // light.setRetain(true);
-
-  // Maximum brightness level can be changed as follows:
-  // light.setBrightnessScale(50);
-
-  // Optionally you can enable optimistic mode for the HALight.
-  // In this mode you won't need to report state back to the HA when commands are executed.
-  // light.setOptimistic(true);
-
-  // Color temperature range (optional)
-  // light.setMinMireds(50);
-  // light.setMaxMireds(200);
-
-  // handle light states
   light.onStateCommand(onStateCommand);
-  light.onBrightnessCommand(onBrightnessCommand);  // optional
-  light.onRGBColorCommand(onRGBColorCommand);      // optional
+  light.onRGBColorCommand(onRGBColorCommand);
+  autoModeSwitch.onCommand(onAutoModeCommand);
 
-  // mqtt.begin(brokerIp);
+  mqtt.begin(brokerIp);
 }
 
 uint32_t Wheel(byte WheelPos) {
@@ -161,9 +146,8 @@ uint32_t Wheel(byte WheelPos) {
 
 void calculateColor() {
 
-  hue += 1;  // Increment the hue for the next iteration
+  hue += 1;
 
-  // Check for overflow and reset the hue to 0
   if (hue >= 256) {
     hue = 0;
   }
@@ -173,9 +157,12 @@ void calculateColor() {
   }
   pixels.show();
 
-  uint8_t red =(pixels.getPixelColor(0) >> 16);
-  uint8_t green =(pixels.getPixelColor(0) >> 8);
-  uint8_t blue =(pixels.getPixelColor(0)) ;
+  uint8_t red = (pixels.getPixelColor(0) >> 16);
+  uint8_t green = (pixels.getPixelColor(0) >> 8);
+  uint8_t blue = (pixels.getPixelColor(0));
+
+  HALight::RGBColor color(red, green, blue);
+  light.setRGBColor(color);
 
   // Print the updated color values
   Serial.print("Hue: ");
@@ -191,10 +178,6 @@ void calculateColor() {
 
 
 void setup() {
-#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
-  clock_prescale_set(clock_div_1);
-#endif
-
   Serial.begin(9600);
 
   connectToWifi();
