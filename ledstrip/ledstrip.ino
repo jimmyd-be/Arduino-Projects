@@ -13,6 +13,13 @@ char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as k
 int status = WL_IDLE_STATUS;  // the Wifi radio's status
 IPAddress brokerIp = BROKER_IP;
 
+const unsigned long REFRESH_INTERVAL = 1000;  // ms
+unsigned long lastRefreshTime = 0;
+
+bool autoMode = true;
+int hue = 0;  // Initialize the hue value
+
+
 #define PIN 5
 #define NUMPIXELS 60
 #define BROKER_ADDR IPAddress(192, 168, 0, 250)
@@ -25,6 +32,7 @@ HADevice device;
 HAMqtt mqtt(client, device);
 
 HALight light("tvLeds", HALight::BrightnessFeature | HALight::RGBFeature);
+
 
 void connectToWifi() {
   // check for the WiFi module:
@@ -62,6 +70,9 @@ void onStateCommand(bool state, HALight* sender) {
   if (state == 0) {
     pixels.clear();
     pixels.show();
+    //  autoMode = false;
+  } else {
+    autoMode = true;
   }
 
   sender->setState(state);  // report state back to the Home Assistant
@@ -83,6 +94,8 @@ void onRGBColorCommand(HALight::RGBColor color, HALight* sender) {
   Serial.println(color.green);
   Serial.print("Blue: ");
   Serial.println(color.blue);
+
+  // autoMode = false;
 
   pixels.clear();
 
@@ -130,9 +143,50 @@ void configureHass() {
   light.onBrightnessCommand(onBrightnessCommand);  // optional
   light.onRGBColorCommand(onRGBColorCommand);      // optional
 
-  mqtt.begin(brokerIp);
+  // mqtt.begin(brokerIp);
+}
 
-  Serial.println("MQTT begin");
+uint32_t Wheel(byte WheelPos) {
+  WheelPos = 255 - WheelPos;
+  if (WheelPos < 85) {
+    return pixels.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  }
+  if (WheelPos < 170) {
+    WheelPos -= 85;
+    return pixels.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  }
+  WheelPos -= 170;
+  return pixels.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
+
+void calculateColor() {
+
+  hue += 1;  // Increment the hue for the next iteration
+
+  // Check for overflow and reset the hue to 0
+  if (hue >= 256) {
+    hue = 0;
+  }
+
+  for (int i = 0; i < NUMPIXELS; i++) {
+    pixels.setPixelColor(i, Wheel(hue));
+  }
+  pixels.show();
+
+  uint8_t red =(pixels.getPixelColor(0) >> 16);
+  uint8_t green =(pixels.getPixelColor(0) >> 8);
+  uint8_t blue =(pixels.getPixelColor(0)) ;
+
+  // Print the updated color values
+  Serial.print("Hue: ");
+  Serial.print(hue);
+  Serial.print(", Red: ");
+  Serial.print(red);
+  Serial.print(", Green: ");
+  Serial.print(green);
+  Serial.print(", Blue: ");
+  Serial.print(blue);
+  Serial.println();
 }
 
 
@@ -153,4 +207,13 @@ void setup() {
 void loop() {
 
   mqtt.loop();
+
+  if (autoMode) {
+
+    if (millis() - lastRefreshTime >= REFRESH_INTERVAL) {
+      lastRefreshTime += REFRESH_INTERVAL;
+
+      calculateColor();
+    }
+  }
 }
