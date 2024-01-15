@@ -3,6 +3,15 @@
 #include <WiFiNINA.h>
 #include "arduino_secrets.h"
 
+enum Mode {
+  AUTO,
+  MANUAL,
+  WAVE,
+  FAST_WAVE,
+  ALL
+};
+
+
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;    // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
@@ -12,8 +21,9 @@ IPAddress brokerIp = BROKER_IP;
 const unsigned long REFRESH_INTERVAL = 1000;  // ms
 unsigned long lastRefreshTime = 0;
 
-bool autoMode = true;
+Mode mode = AUTO;
 int hue = 0;
+int wavePosition = 0;
 
 #define PIN 5
 #define NUMPIXELS 60
@@ -26,7 +36,7 @@ HADevice device;
 HAMqtt mqtt(client, device);
 
 HALight light("tvLeds", HALight::RGBFeature);
-HASwitch autoModeSwitch("autoMode");
+HASelect modeSelect("modeSelect");
 
 
 void connectToWifi() {
@@ -58,17 +68,40 @@ void connectToWifi() {
   Serial.println("You're connected to the network");
 }
 
-void onAutoModeCommand(bool state, HASwitch* sender) {
+void onSelectCommand(int8_t index, HASelect* sender) {
   Serial.print("State: ");
-  Serial.println(state);
+  Serial.println(index);
 
-  if (state == 0) {
-    autoMode = false;
-  } else {
-    autoMode = true;
+  switch (index) {
+    case 0:
+      // Option "Auto" was selected
+      mode = AUTO;
+      break;
+
+    case 1:
+      // Option "Manual" was selected
+      mode = MANUAL;
+      break;
+
+    case 2:
+      // Option "Wave" was selected
+      mode = WAVE;
+      break;
+    
+    case 3:
+      mode = ALL;
+      break;
+
+    case 4:
+      mode = FAST_WAVE;
+      break;
+
+    default:
+      mode = AUTO;
+      return;
   }
 
-  sender->setState(state);
+  sender->setState(index);
 }
 
 void onStateCommand(bool state, HALight* sender) {
@@ -78,9 +111,9 @@ void onStateCommand(bool state, HALight* sender) {
   if (state == false) {
     pixels.clear();
     pixels.show();
-    autoMode = false;
-    autoModeSwitch.setState(false);
-  } 
+    mode = MANUAL;
+    modeSelect.setState(1);
+  }
   sender->setState(state);
 }
 
@@ -93,7 +126,7 @@ void onRGBColorCommand(HALight::RGBColor color, HALight* sender) {
   Serial.print("Blue: ");
   Serial.println(color.blue);
 
-  autoMode = false;
+  mode = MANUAL;
 
   pixels.clear();
 
@@ -121,12 +154,14 @@ void configureHass() {
 
   light.setName("Tv");
   light.setCurrentState(true);
-  autoModeSwitch.setName("Auto mode");
-  autoModeSwitch.setCurrentState(true);
+
+  modeSelect.setName("Mode");
+  modeSelect.setCurrentState(0);
+  modeSelect.setOptions("Auto;Manual;Wave;All;Fast Wave");
 
   light.onStateCommand(onStateCommand);
   light.onRGBColorCommand(onRGBColorCommand);
-  autoModeSwitch.onCommand(onAutoModeCommand);
+  modeSelect.onCommand(onSelectCommand);
 
   mqtt.begin(brokerIp);
 }
@@ -191,12 +226,56 @@ void loop() {
 
   mqtt.loop();
 
-  if (autoMode) {
+  if (mode == AUTO) {
+
+    Serial.println("Auto mode");
 
     if (millis() - lastRefreshTime >= REFRESH_INTERVAL) {
       lastRefreshTime += REFRESH_INTERVAL;
 
       calculateColor();
     }
+  } else if (mode == WAVE) {
+
+    Serial.println("Wave mode");
+
+    int rotationPhase = (millis() / 5000) % NUMPIXELS;
+
+    for (int i = 0; i < NUMPIXELS; i++) {
+      int hue = 255 * ((i + rotationPhase) % NUMPIXELS) / NUMPIXELS;
+
+      pixels.setPixelColor(i, Wheel(hue));
+    }
+    pixels.show();
+
+    // Delay to control the speed of the wave
+    delay(50);
+  } else if (mode == FAST_WAVE) {
+
+    Serial.println("Fast Wave mode");
+
+    int rotationPhase = (millis() / 50) % NUMPIXELS;
+
+    for (int i = 0; i < NUMPIXELS; i++) {
+      int hue = 255 * ((i + rotationPhase) % NUMPIXELS) / NUMPIXELS;
+
+      pixels.setPixelColor(i, Wheel(hue));
+    }
+    pixels.show();
+
+    // Delay to control the speed of the wave
+    delay(50);
+  }else if (mode == ALL) {
+
+    Serial.println("All mode");
+
+    // Create a moving wave effect
+    for (int i = 0; i < NUMPIXELS; i++) {
+      pixels.setPixelColor(i, Wheel((255 / NUMPIXELS) * i));
+    }
+    pixels.show();
+
+    // Delay to control the speed of the wave
+    delay(50);
   }
 }
