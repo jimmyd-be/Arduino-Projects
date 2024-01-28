@@ -1,6 +1,7 @@
 #include <Adafruit_NeoPixel.h>
 #include <ArduinoHA.h>
 #include <WiFiNINA.h>
+#include <ArduinoOTA.h>
 #include "arduino_secrets.h"
 
 enum Mode {
@@ -66,6 +67,8 @@ void connectToWifi() {
 
   // you're connected now, so print out the data:
   Serial.println("You're connected to the network");
+
+  ArduinoOTA.begin(WiFi.localIP(), "Arduino led bar", "password", InternalStorage);
 }
 
 void onSelectCommand(int8_t index, HASelect* sender) {
@@ -87,13 +90,13 @@ void onSelectCommand(int8_t index, HASelect* sender) {
       // Option "Wave" was selected
       mode = WAVE;
       break;
-    
+
     case 3:
-      mode = ALL;
+      mode = FAST_WAVE;
       break;
 
     case 4:
-      mode = FAST_WAVE;
+      mode = ALL;
       break;
 
     default:
@@ -137,6 +140,7 @@ void onRGBColorCommand(HALight::RGBColor color, HALight* sender) {
   pixels.show();
 
   sender->setRGBColor(color);
+  modeSelect.setState(1);
 }
 
 
@@ -157,7 +161,7 @@ void configureHass() {
 
   modeSelect.setName("Mode");
   modeSelect.setCurrentState(0);
-  modeSelect.setOptions("Auto;Manual;Wave;All;Fast Wave");
+  modeSelect.setOptions("Auto;Manual;Wave;Fast Wave;All");
 
   light.onStateCommand(onStateCommand);
   light.onRGBColorCommand(onRGBColorCommand);
@@ -224,58 +228,63 @@ void setup() {
 
 void loop() {
 
+  ArduinoOTA.poll();
+
   mqtt.loop();
 
-  if (mode == AUTO) {
+  if (light.getCurrentState()) {
 
-    Serial.println("Auto mode");
+    if (mode == AUTO) {
 
-    if (millis() - lastRefreshTime >= REFRESH_INTERVAL) {
-      lastRefreshTime += REFRESH_INTERVAL;
+      Serial.println("Auto mode");
 
-      calculateColor();
+      if (millis() - lastRefreshTime >= REFRESH_INTERVAL) {
+        lastRefreshTime += REFRESH_INTERVAL;
+
+        calculateColor();
+      }
+    } else if (mode == WAVE) {
+
+      Serial.println("Wave mode");
+
+      int rotationPhase = (millis() / 5000) % NUMPIXELS;
+
+      for (int i = 0; i < NUMPIXELS; i++) {
+        int hue = 255 * ((i + rotationPhase) % NUMPIXELS) / NUMPIXELS;
+
+        pixels.setPixelColor(i, Wheel(hue));
+      }
+      pixels.show();
+
+      // Delay to control the speed of the wave
+      delay(50);
+    } else if (mode == FAST_WAVE) {
+
+      Serial.println("Fast Wave mode");
+
+      int rotationPhase = (millis() / 50) % NUMPIXELS;
+
+      for (int i = 0; i < NUMPIXELS; i++) {
+        int hue = 255 * ((i + rotationPhase) % NUMPIXELS) / NUMPIXELS;
+
+        pixels.setPixelColor(i, Wheel(hue));
+      }
+      pixels.show();
+
+      // Delay to control the speed of the wave
+      delay(50);
+    } else if (mode == ALL) {
+
+      Serial.println("All mode");
+
+      // Create a moving wave effect
+      for (int i = 0; i < NUMPIXELS; i++) {
+        pixels.setPixelColor(i, Wheel((255 / NUMPIXELS) * i));
+      }
+      pixels.show();
+
+      // Delay to control the speed of the wave
+      delay(50);
     }
-  } else if (mode == WAVE) {
-
-    Serial.println("Wave mode");
-
-    int rotationPhase = (millis() / 5000) % NUMPIXELS;
-
-    for (int i = 0; i < NUMPIXELS; i++) {
-      int hue = 255 * ((i + rotationPhase) % NUMPIXELS) / NUMPIXELS;
-
-      pixels.setPixelColor(i, Wheel(hue));
-    }
-    pixels.show();
-
-    // Delay to control the speed of the wave
-    delay(50);
-  } else if (mode == FAST_WAVE) {
-
-    Serial.println("Fast Wave mode");
-
-    int rotationPhase = (millis() / 50) % NUMPIXELS;
-
-    for (int i = 0; i < NUMPIXELS; i++) {
-      int hue = 255 * ((i + rotationPhase) % NUMPIXELS) / NUMPIXELS;
-
-      pixels.setPixelColor(i, Wheel(hue));
-    }
-    pixels.show();
-
-    // Delay to control the speed of the wave
-    delay(50);
-  }else if (mode == ALL) {
-
-    Serial.println("All mode");
-
-    // Create a moving wave effect
-    for (int i = 0; i < NUMPIXELS; i++) {
-      pixels.setPixelColor(i, Wheel((255 / NUMPIXELS) * i));
-    }
-    pixels.show();
-
-    // Delay to control the speed of the wave
-    delay(50);
   }
 }
